@@ -84,6 +84,8 @@ class UI {
         demoBtn.classList.remove('playing');
         demoBtn.innerHTML = '&#9654; Demo 演示';
       }
+
+      this._updatePlaylist();
     };
 
     this.engine.onTrackChange = () => {
@@ -143,7 +145,7 @@ class UI {
 
     this.engine.playlist.forEach((track, i) => {
       const li = document.createElement('li');
-      li.className = 'playlist-item' + (i === this.engine.currentIndex ? ' active' : '');
+      li.className = 'playlist-item' + (i === this.engine.currentIndex && !this.engine._demoNodes ? ' active' : '');
 
       const name = document.createElement('span');
       name.className = 'track-name';
