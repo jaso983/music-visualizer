@@ -15,6 +15,7 @@ class UI {
     this._initFileInput();
     this._initFolderScan();
     this._initDemo();
+    this._initSettings();
     this.engine.restorePlaylist();
   }
 
@@ -42,6 +43,7 @@ class UI {
       tabs.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
       this.viz.setMode(tab.dataset.mode);
+      this._showCurrentModeSection();
     });
   }
 
@@ -245,6 +247,92 @@ class UI {
       } else {
         this.engine.startDemo();
       }
+    });
+  }
+
+  /* ---- Settings Panel ---- */
+  _initSettings() {
+    const modeNames = { bars: '频谱柱状', circular: '环形频谱', waveform: '波形图' };
+
+    const panel = document.createElement('div');
+    panel.className = 'settings-panel';
+    panel.id = 'settingsPanel';
+
+    let html = '<div class="settings-panel-header"><span class="settings-panel-title">可视化设置</span><button class="settings-close-btn" id="settingsCloseBtn">&times;</button></div>';
+
+    for (const [mode, defs] of Object.entries(Visualizer.SETTINGS_DEF)) {
+      html += `<div data-mode-section="${mode}" class="settings-section"><div class="settings-section-title">${modeNames[mode]}</div>`;
+      defs.forEach(d => {
+        const val = this.viz.settings[mode][d.key];
+        html += `<div class="setting-item">
+          <label class="setting-label"><span>${d.label}</span><span class="setting-value" data-value="${mode}-${d.key}">${val}</span></label>
+          <input type="range" class="setting-slider" min="${d.min}" max="${d.max}" step="${d.step}" value="${val}" data-mode="${mode}" data-setting="${d.key}">
+        </div>`;
+      });
+      html += `<button class="settings-reset-btn" data-mode="${mode}">重置默认</button></div>`;
+    }
+
+    panel.innerHTML = html;
+    document.querySelector('.app-header').appendChild(panel);
+
+    this._showCurrentModeSection();
+
+    // Toggle open/close
+    document.getElementById('settingsBtn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      panel.classList.toggle('open');
+    });
+
+    document.getElementById('settingsCloseBtn').addEventListener('click', () => {
+      panel.classList.remove('open');
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!panel.contains(e.target) && e.target.id !== 'settingsBtn') {
+        panel.classList.remove('open');
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') panel.classList.remove('open');
+    });
+
+    // Slider events
+    panel.querySelectorAll('.setting-slider').forEach(slider => {
+      slider.addEventListener('input', () => {
+        const mode = slider.dataset.mode;
+        const key = slider.dataset.setting;
+        const value = parseFloat(slider.value);
+        this.viz.updateSetting(mode, key, value);
+
+        const valueSpan = panel.querySelector(`[data-value="${mode}-${key}"]`);
+        if (valueSpan) {
+          const def = Visualizer.SETTINGS_DEF[mode].find(d => d.key === key);
+          valueSpan.textContent = def && def.step >= 1 ? value.toFixed(0) : value.toFixed(2);
+        }
+      });
+    });
+
+    // Reset buttons
+    panel.querySelectorAll('.settings-reset-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const mode = btn.dataset.mode;
+        Visualizer.SETTINGS_DEF[mode].forEach(d => {
+          this.viz.updateSetting(mode, d.key, d.default);
+          const slider = panel.querySelector(`.setting-slider[data-mode="${mode}"][data-setting="${d.key}"]`);
+          if (slider) slider.value = d.default;
+          const valueSpan = panel.querySelector(`[data-value="${mode}-${d.key}"]`);
+          if (valueSpan) valueSpan.textContent = d.step >= 1 ? d.default.toFixed(0) : d.default.toFixed(2);
+        });
+      });
+    });
+  }
+
+  _showCurrentModeSection() {
+    const panel = document.getElementById('settingsPanel');
+    if (!panel) return;
+    panel.querySelectorAll('[data-mode-section]').forEach(sec => {
+      sec.style.display = sec.dataset.modeSection === this.viz.mode ? '' : 'none';
     });
   }
 
