@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmd /c start \"\" \"c:/Users/ASUS/Desktop/多媒体/project/index.html\")",
+      "Bash(git -C \"c:/Users/ASUS/Desktop/多媒体/project\" status)",
+      "Bash(git --version)",
+      "Bash(gh --version)",
+      "Bash(gh auth *)",
+      "Bash(git config *)"
+    ]
+  }
+}
