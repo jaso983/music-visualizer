@@ -11,8 +11,7 @@ class Visualizer {
     this.frequencyData = null;
     this.timeData = null;
 
-    this.particles = [];
-    this._energyHistory = [];
+    this._smoothTime = null;
   }
 
   init(canvas) {
@@ -33,8 +32,7 @@ class Visualizer {
 
   setMode(mode) {
     this.mode = mode;
-    this.particles = [];
-    this._energyHistory = [];
+    this._smoothTime = null;
   }
 
   setTheme(theme) {
@@ -62,7 +60,6 @@ class Visualizer {
     switch (this.mode) {
       case 'bars': this._drawBars(); break;
       case 'circular': this._drawCircular(); break;
-      case 'particles': this._drawParticles(); break;
       case 'waveform': this._drawWaveform(); break;
     }
   }
@@ -97,13 +94,14 @@ class Visualizer {
   _drawBars() {
     const { ctx, width, height, frequencyData } = this;
     const len = frequencyData.length;
-    const barW = width / len;
+    const visible = Math.floor(len * 0.82);
+    const barW = width / visible;
     const gap = Math.max(1, barW * 0.15);
 
-    for (let i = 0; i < len; i++) {
+    for (let i = 0; i < visible; i++) {
       const v = frequencyData[i] / 255;
       const barH = v * height * 0.85;
-      const hue = (i / len) * 300 + 200;
+      const hue = (i / visible) * 300 + 200;
       const lightness = 40 + v * 35;
 
       const grad = ctx.createLinearGradient(0, height, 0, height - barH);
@@ -126,6 +124,7 @@ class Visualizer {
     const maxR = Math.min(width, height) * 0.38;
     const innerR = maxR * 0.25;
     const len = frequencyData.length;
+    const visible = Math.floor(len * 0.82);
 
     const bassAvg = frequencyData.slice(0, 15).reduce((a, b) => a + b, 0) / (15 * 255);
     const pulse = innerR + bassAvg * 12;
@@ -141,11 +140,11 @@ class Visualizer {
     ctx.arc(cx, cy, innerR, 0, Math.PI * 2);
     ctx.stroke();
 
-    for (let i = 0; i < len; i++) {
+    for (let i = 0; i < visible; i++) {
       const v = frequencyData[i] / 255;
-      const angle = (i / len) * Math.PI * 2 - Math.PI / 2;
+      const angle = (i / visible) * Math.PI * 2 - Math.PI / 2;
       const barH = v * (maxR - innerR);
-      const hue = (i / len) * 360;
+      const hue = (i / visible) * 360;
 
       const x1 = cx + Math.cos(angle) * innerR;
       const y1 = cy + Math.sin(angle) * innerR;
@@ -153,7 +152,7 @@ class Visualizer {
       const y2 = cy + Math.sin(angle) * (innerR + barH);
 
       ctx.strokeStyle = `hsl(${hue}, 80%, ${50 + v * 25}%)`;
-      ctx.lineWidth = Math.max(1.2, (maxR - innerR) / len * 1.8);
+      ctx.lineWidth = Math.max(1.2, (maxR - innerR) / visible * 1.8);
       ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.moveTo(x1, y1);
@@ -162,130 +161,88 @@ class Visualizer {
     }
   }
 
-  /* ---- Mode: Particles ---- */
-  _drawParticles() {
-    const { ctx, width, height, frequencyData } = this;
-    const cx = width / 2;
-    const cy = height / 2;
-
-    const bass = frequencyData.slice(0, 12).reduce((a, b) => a + b, 0) / 12;
-    const mid = frequencyData.slice(15, 60).reduce((a, b) => a + b, 0) / 45;
-
-    // Beat detection
-    this._energyHistory.push(bass);
-    if (this._energyHistory.length > 43) this._energyHistory.shift();
-    const avgEnergy = this._energyHistory.reduce((a, b) => a + b, 0) / this._energyHistory.length;
-    const isBeat = bass > avgEnergy * 1.5 && bass > 25;
-
-    // Spawn particles
-    const spawnCount = isBeat ? Math.floor(bass / 8) : Math.floor(bass / 25);
-    for (let i = 0; i < spawnCount; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const speed = (bass / 255) * 5 + 0.5;
-      this.particles.push({
-        x: cx + (Math.random() - 0.5) * 20,
-        y: cy + (Math.random() - 0.5) * 20,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        life: 1,
-        decay: 0.006 + Math.random() * 0.018,
-        size: 1.2 + Math.random() * 4,
-        hue: (angle / (Math.PI * 2)) * 360 + mid * 0.3,
-      });
-    }
-
-    // Draw glow on beat
-    if (isBeat) {
-      const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, 120);
-      glow.addColorStop(0, 'rgba(233, 69, 96, 0.15)');
-      glow.addColorStop(1, 'rgba(233, 69, 96, 0)');
-      ctx.fillStyle = glow;
-      ctx.beginPath();
-      ctx.arc(cx, cy, 120, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // Update & draw
-    for (let i = this.particles.length - 1; i >= 0; i--) {
-      const p = this.particles[i];
-      p.x += p.vx;
-      p.y += p.vy;
-      p.vx *= 0.995;
-      p.vy *= 0.995;
-      p.life -= p.decay;
-
-      if (p.life <= 0 || p.x < -20 || p.x > width + 20 || p.y < -20 || p.y > height + 20) {
-        this.particles.splice(i, 1);
-        continue;
-      }
-
-      ctx.fillStyle = `hsla(${p.hue}, 80%, 60%, ${p.life * 0.8})`;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    if (this.particles.length > 600) {
-      this.particles = this.particles.slice(-600);
-    }
-  }
-
   /* ---- Mode: Waveform ---- */
   _drawWaveform() {
     const { ctx, width, height, timeData } = this;
-    const midY = height / 2;
+    const cx = width / 2;
+    const cy = height / 2;
+    const maxR = Math.min(width, height) * 0.43;
+    const len = timeData.length;
 
-    // Mirror fill gradient
-    const grad = ctx.createLinearGradient(0, 0, 0, height);
-    const c = this.theme === 'dark' ? '233, 69, 96' : '214, 51, 108';
-    grad.addColorStop(0, `rgba(${c}, 0.02)`);
-    grad.addColorStop(0.45, `rgba(${c}, 0.15)`);
-    grad.addColorStop(0.5, `rgba(${c}, 0.4)`);
-    grad.addColorStop(0.55, `rgba(${c}, 0.15)`);
-    grad.addColorStop(1, `rgba(${c}, 0.02)`);
+    // Temporal smoothing: blend current frame with previous
+    if (!this._smoothTime || this._smoothTime.length !== len) {
+      this._smoothTime = new Float32Array(len);
+      for (let i = 0; i < len; i++) this._smoothTime[i] = timeData[i];
+    }
+    const alpha = 0.28;
+    for (let i = 0; i < len; i++) {
+      this._smoothTime[i] += (timeData[i] - this._smoothTime[i]) * alpha;
+    }
 
-    ctx.fillStyle = grad;
+    // Reference rings
+    for (let r = maxR * 0.25; r <= maxR * 1.05; r += maxR * 0.2) {
+      ctx.strokeStyle = this.theme === 'dark'
+        ? `rgba(255,255,255,${0.04})`
+        : `rgba(0,0,0,${0.04})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // Outer ring — smoothed full-resolution
+    ctx.strokeStyle = '#e94560';
+    ctx.lineWidth = 2.2;
+    ctx.shadowColor = '#e94560';
+    ctx.shadowBlur = 14;
     ctx.beginPath();
-    ctx.moveTo(0, midY);
-
-    const step = width / timeData.length;
-    for (let i = 0; i < timeData.length; i++) {
-      const v = timeData[i] / 128 - 1;
-      const y = midY + v * midY * 0.9;
-      ctx.lineTo(i * step, y);
+    for (let i = 0; i < len; i++) {
+      const v = this._smoothTime[i] / 128 - 1;
+      const angle = (i / len) * Math.PI * 2 - Math.PI / 2;
+      const r = maxR * 0.55 + v * maxR * 0.42;
+      const x = cx + Math.cos(angle) * r;
+      const y = cy + Math.sin(angle) * r;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
     }
-
-    // Mirror
-    for (let i = timeData.length - 1; i >= 0; i--) {
-      const v = timeData[i] / 128 - 1;
-      const y = midY - v * midY * 0.9;
-      ctx.lineTo(i * step, y);
-    }
-
     ctx.closePath();
-    ctx.fill();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
 
-    // Center line
-    ctx.strokeStyle = this.theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
-    ctx.lineWidth = 1;
+    // Inner ring — decimated & smoothed
+    const step = Math.ceil(len / 90);
+    ctx.strokeStyle = this.theme === 'dark'
+      ? 'rgba(233, 69, 96, 0.45)'
+      : 'rgba(214, 51, 108, 0.35)';
+    ctx.lineWidth = 1.6;
     ctx.beginPath();
-    ctx.moveTo(0, midY);
-    ctx.lineTo(width, midY);
+    for (let i = 0; i < len; i += step) {
+      let sum = 0;
+      let n = 0;
+      for (let j = i; j < i + step && j < len; j++, n++) { sum += this._smoothTime[j]; }
+      const v = (sum / n) / 128 - 1;
+      const angle = (i / len) * Math.PI * 2 - Math.PI / 2;
+      const r = maxR * 0.55 + v * maxR * 0.42;
+      const x = cx + Math.cos(angle) * r;
+      const y = cy + Math.sin(angle) * r;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
     ctx.stroke();
 
-    // Glow waveform line
-    ctx.strokeStyle = this.theme === 'dark' ? '#e94560' : '#d6336c';
-    ctx.lineWidth = 2.5;
-    ctx.shadowColor = this.theme === 'dark' ? '#e94560' : '#d6336c';
+    // Center dot
+    let ampSum = 0;
+    for (let i = 0; i < len; i++) { ampSum += Math.abs(this._smoothTime[i] / 128 - 1); }
+    const dotR = 3 + (ampSum / len) * 14;
+    ctx.fillStyle = this.theme === 'dark'
+      ? 'rgba(233, 69, 96, 0.65)'
+      : 'rgba(214, 51, 108, 0.55)';
+    ctx.shadowColor = '#e94560';
     ctx.shadowBlur = 10;
     ctx.beginPath();
-    for (let i = 0; i < timeData.length; i++) {
-      const v = timeData[i] / 128 - 1;
-      const y = midY + v * midY * 0.9;
-      if (i === 0) ctx.moveTo(i * step, y);
-      else ctx.lineTo(i * step, y);
-    }
-    ctx.stroke();
+    ctx.arc(cx, cy, dotR, 0, Math.PI * 2);
+    ctx.fill();
     ctx.shadowBlur = 0;
   }
 }

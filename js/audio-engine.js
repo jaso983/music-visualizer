@@ -166,11 +166,9 @@ class AudioEngine {
   }
 
   startDemo() {
+    this.pause();
     this.init();
     if (this.audioContext.state === 'suspended') this.audioContext.resume();
-
-    this._stopSource();
-    this._stopDemo();
 
     const osc1 = this.audioContext.createOscillator();
     osc1.type = 'sawtooth';
